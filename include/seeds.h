@@ -3,10 +3,10 @@
 
 #include <stdint.h>
 
-#define UINT32_N	10
+#define SEED_UINT32_N	10
 
 struct seed {
-	uint32_t seeds[UINT32_N];
+	uint32_t seeds[SEED_UINT32_N];
 };
 
 /* Load seeds.

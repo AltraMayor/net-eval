@@ -47,15 +47,15 @@ void load_seeds(int run, int nnodes, int node_id,
 		err(1, "Can't open file `%s'", SEEDS_FILENAME);
 
 	/* Skip previous runs' seeds. */
-	skip_seeds(seeds, (run - 1) * (1 + 1 + nnodes) * UINT32_N);
+	skip_seeds(seeds, (run - 1) * (1 + 1 + nnodes) * SEED_UINT32_N);
 
-	read_seed_vec(seeds, s1->seeds, UINT32_N);
-	read_seed_vec(seeds, s2->seeds, UINT32_N);
+	read_seed_vec(seeds, s1->seeds, SEED_UINT32_N);
+	read_seed_vec(seeds, s2->seeds, SEED_UINT32_N);
 
 	/* Skip other nodes' seeds. */
-	skip_seeds(seeds, (node_id - 1) * UINT32_N);
+	skip_seeds(seeds, (node_id - 1) * SEED_UINT32_N);
 
-	read_seed_vec(seeds, node_seed->seeds, UINT32_N);
+	read_seed_vec(seeds, node_seed->seeds, SEED_UINT32_N);
 
 	close_seeds(seeds);
 }
@@ -64,6 +64,6 @@ void print_seed(const char *name, struct seed *s)
 {
 	int i;
 	printf("Seeds of %s:\n", name);
-	for (i = 0; i < UINT32_N; i++)
+	for (i = 0; i < SEED_UINT32_N; i++)
 		printf("%02i: %08x\n", i + 1, s->seeds[i]);
 }

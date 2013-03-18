@@ -3,6 +3,7 @@
 #include <stdio.h>
 
 #include <seeds.h>
+#include <rdist.h>
 
 int main(void)
 {
@@ -11,6 +12,7 @@ int main(void)
 	int node_id = 2;
 	
 	struct seed s1, s2, node_seed;
+	struct unif_state dst_shuffle;
 
 	/* TODO Read parameters:
 	 *	Prefix file name
@@ -31,6 +33,11 @@ int main(void)
 	print_seed("node_seed", &node_seed);
 
 	/* TODO Load and shuffle destinations. */
+	init_unif(&dst_shuffle, s1.seeds, SEED_UINT32_N);
+	printf("\n%li\n", sample_unif_0_n1(&dst_shuffle, 10));
+	printf("%li\n", sample_unif_1_n(&dst_shuffle, 10));
+	printf("%li\n", sample_unif_0_n(&dst_shuffle, 10));
+	end_unif(&dst_shuffle);
 
 	/* TODO Convert destinations to a binary vector. */
 
