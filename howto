@@ -1,0 +1,2 @@
+### Compile pw
+gcc -o pw pw.c
