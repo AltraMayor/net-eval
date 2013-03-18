@@ -9,5 +9,6 @@ cd ..
 
 ### Compile pw
 gcc -c -Iinclude seeds.c
+gcc -c -Iinclude strarray.c
 gcc -c -DDSFMT_MEXP=216091 -Iinclude pw.c
-gcc -o pw seeds.o dSFMT-src-2.2.1/dSFMT.o pw.o
+gcc -o pw seeds.o strarray.o dSFMT-src-2.2.1/dSFMT.o pw.o
