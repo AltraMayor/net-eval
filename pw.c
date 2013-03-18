@@ -2,8 +2,16 @@
 
 #include <stdio.h>
 
+#include <seeds.h>
+
 int main(void)
 {
+	int run = 1;
+	int nnodes = 3;
+	int node_id = 2;
+	
+	struct seed s1, s2, node_seed;
+
 	/* TODO Read parameters:
 	 *	Prefix file name
 	 *	Stack ("ip" or "xia")
@@ -16,7 +24,11 @@ int main(void)
 	 *	Run (1..)
 	 */
 
-	/* TODO Load seeds. */
+	/* Load seeds. */
+	load_seeds(run, nnodes, node_id, &s1, &s2, &node_seed);
+	print_seed("s1", &s1);
+	print_seed("s2", &s2);
+	print_seed("node_seed", &node_seed);
 
 	/* TODO Load and shuffle destinations. */
 

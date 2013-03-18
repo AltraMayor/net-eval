@@ -1,2 +1,4 @@
 ### Compile pw
-gcc -o pw pw.c
+gcc -c -Iinclude seeds.c
+gcc -c -Iinclude pw.c
+gcc -o pw seeds.o pw.o
