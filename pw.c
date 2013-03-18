@@ -31,6 +31,7 @@ static void shuffle_array(char **array, uint64_t size, struct seed *s)
 int main(void)
 {
 	const char *prefix_filename = "prefix-2013-03-17-14-00";
+	double s = 1.0;
 
 	int run = 1;
 	int nnodes = 3;
@@ -39,9 +40,11 @@ int main(void)
 	struct seed s1, s2, node_seed;
 	uint64_t prefix_array_size;
 	char **prefix_array;
+	struct zipf_cache zcache;
 
 	/* TODO Read parameters:
 	 *	Prefix file name
+	 *	The s parameter of Zipf distribution
 	 *	Stack ("ip" or "xia")
 	 *	Network interface (e.g. "eth0")
 	 *	Ethernet address of router (e.g. "11:22:33:44:55:66")
@@ -65,17 +68,28 @@ int main(void)
 	if (!prefix_array_size)
 		err(1, "Prefix file `%s' is empty", prefix_filename);
 	shuffle_array(prefix_array, prefix_array_size, &s1);
+	/*
 	print_array(prefix_array, prefix_array_size);
+	*/
 
 	/* TODO Convert destinations to a binary vector. */
 	free_array(prefix_array);
 
-	/* TODO Cache Zipf sampling. */
+	/* Cache Zipf sampling. */
+	printf("Initializing Zipf cache... ");
+	fflush(stdout);
+	init_zipf_cache(&zcache, prefix_array_size * 30, s, prefix_array_size,
+		node_seed.seeds, SEED_UINT32_N);
+	printf("DONE\n");
+	/*
+	print_zipf_cache(&zcache);
+	*/
 
 	/* TODO Packet template. */
 	/* TODO Loop: */
 		/* TODO Sample destination and update packet template. */
 		/* TODO Send packet out. */
 
+	end_zipf_cache(&zcache);
 	return 0;
 }

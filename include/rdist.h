@@ -37,4 +37,18 @@ static inline long sample_unif_0_n(struct unif_state *unif, long n)
 	return (long)(dsfmt_genrand_close_open(&unif->state) * (n + 1.0));
 }
 
+struct zipf_cache {
+	double s;
+	long n;
+	long index;
+	long sample_size;
+	long *samples;
+};
+
+void init_zipf_cache(struct zipf_cache *cache, long sample_size,
+	double s, long n, uint32_t *seeds, int len);
+void end_zipf_cache(struct zipf_cache *cache);
+long sample_zipf_cache(struct zipf_cache *cache);
+void print_zipf_cache(struct zipf_cache *cache);
+
 #endif	/* _RDIST_H */
