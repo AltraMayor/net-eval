@@ -1,6 +1,7 @@
 /* Packet writer. */
 
 #include <stdio.h>
+#include <err.h>
 
 #include <seeds.h>
 #include <rdist.h>

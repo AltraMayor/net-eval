@@ -28,7 +28,7 @@ static uint64_t process_content(char *buf, uint64_t size, char ch)
 
 		case '\0':
 			if (first) {
-				warnx("File has '\0' in its content");
+				warnx("File has '\\0' in its content");
 				first = 0;
 			}
 			buf[i] = ch;

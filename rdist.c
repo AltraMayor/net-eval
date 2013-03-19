@@ -35,13 +35,15 @@ static void init_zipf_cdf(struct zipf_state *state)
 }
 
 /* For debuging. */
-static void print_cdf(struct zipf_state *state)
+/*
+static void print_zipf_cdf(struct zipf_state *state)
 {
 	long i;
 	for (i = 0; i < state->n; i++)
 		printf("CDF_%li = %f\n", i + 1, state->cdf[i]);
 	printf("\n");
 }
+*/
 
 /* When s == 0, it's just the uniform distribution. */
 static void init_zipf(struct zipf_state *state, double s, long n)
