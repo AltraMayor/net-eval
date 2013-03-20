@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <string.h>
 #include <err.h>
+#include <errno.h>
 
 #include <sys/types.h>		/* socket(), sendto()	*/
 #include <sys/socket.h>		/* socket(), sendto()	*/
@@ -136,20 +137,35 @@ static void set_dev(struct sockaddr_ll *dev, const char *ifname, int proto,
 	memmove(dev->sll_addr, dst_mac, len);
 }
 
-static inline void engine_send(struct sndpkt_engine *engine)
+static inline int engine_send(struct sndpkt_engine *engine)
 {
 	ssize_t sent = sendto(engine->sk, engine->pkt_template,
-		engine->template_len, 0, (struct sockaddr *)&engine->dev,
-		sizeof(engine->dev));
-	if (sent != engine->template_len)
+		engine->template_len, MSG_DONTWAIT,
+		(struct sockaddr *)&engine->dev, sizeof(engine->dev));
+	if (sent == engine->template_len)
+		return 1;
+
+	assert(sent == -1);
+	switch (errno) {
+	case ENOBUFS:
+	case EAGAIN:
+#if EAGAIN != EWOULDBLOCK
+	case EWOULDBLOCK:
+#endif
+		break;
+
+	default:
 		warn("sendto() failed with %li", sent);
+		break;
+	}
+	return 0;
 }
 
-static void ipv4_send_packet(struct sndpkt_engine *engine, union net_addr *addr)
+static int ipv4_send_packet(struct sndpkt_engine *engine, union net_addr *addr)
 {
 	set_ipv4_template(engine->pkt_template, addr->ip,
 		engine->cookie.ip.sum);
-	engine_send(engine);
+	return engine_send(engine);
 }
 
 void init_sndpkt_engine(struct sndpkt_engine *engine, const char *stack,

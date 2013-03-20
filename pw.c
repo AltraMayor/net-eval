@@ -2,11 +2,19 @@
 
 #include <stdio.h>
 #include <err.h>
+#include <time.h>
 
 #include <seeds.h>
 #include <rdist.h>
 #include <strarray.h>
 #include <sndpkt.h>
+
+double now(void)
+{
+	struct timespec tp;
+	assert(!clock_gettime(CLOCK_MONOTONIC, &tp));
+	return tp.tv_sec + tp.tv_nsec / 1.0e9;
+}
 
 int main(void)
 {
@@ -28,6 +36,9 @@ int main(void)
 	uint64_t addrs_count;
 	struct zipf_cache zcache;
 	struct sndpkt_engine engine;
+
+	double start, diff, count;
+	long index;
 
 	/* TODO Read parameters:
 	 *	Prefix file name
@@ -68,12 +79,23 @@ int main(void)
 	print_zipf_cache(&zcache);
 	*/
 
+	/* Sample destinations and send packets out. */
 	init_sndpkt_engine(&engine, stack, ifname, packet_len,
 		dst_mac, sizeof(dst_mac), dst_addr_type);
+	index = sample_zipf_cache(&zcache);
+	count = 0.0;
+	start = now();
 	while (1) {
-		/* Sample destination and send packet out. */
-		long i = sample_zipf_cache(&zcache);
-		sndpkt_send(&engine, &addrs[i - 1]);
+		if (!sndpkt_send(&engine, &addrs[index - 1]))
+			continue; /* No packet sent. */
+		index = sample_zipf_cache(&zcache);
+		count++;
+		diff = now() - start;
+		if (diff >= 10.0) {
+			printf("%.1f pps\n", count / diff);
+			count = 0.0;
+			start = now();
+		}
 	}
 
 	end_sndpkt_engine(&engine);

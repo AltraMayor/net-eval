@@ -14,4 +14,4 @@ gcc -c -Wall -Iinclude -DDSFMT_MEXP=216091 strarray.c
 gcc -c -Wall -Iinclude sndpkt.c
 gcc -c -Wall -Iinclude -DDSFMT_MEXP=216091 pw.c
 gcc -o pw seeds.o rdist.o strarray.o sndpkt.o \
-	dSFMT-src-2.2.1/dSFMT.o pw.o -lm
+	dSFMT-src-2.2.1/dSFMT.o pw.o -lm -lrt

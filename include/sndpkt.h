@@ -20,7 +20,7 @@ struct sndpkt_engine {
 	char *pkt_template;
 	int template_len;
 	union sndpkt_cookie cookie;
-	void (*send_packet)(struct sndpkt_engine *engine, union net_addr *addr);
+	int (*send_packet)(struct sndpkt_engine *engine, union net_addr *addr);
 };
 
 void init_sndpkt_engine(struct sndpkt_engine *engine, const char *stack,
@@ -28,11 +28,14 @@ void init_sndpkt_engine(struct sndpkt_engine *engine, const char *stack,
 	const unsigned char *dst_mac, int mac_len,
 	const char *dst_addr_type);
 
-/* IMPORTANT: This function does NOT support multiple threads! */
-static inline void sndpkt_send(struct sndpkt_engine *engine,
+/* IMPORTANT: This function does NOT support multiple threads!
+ * RETURN 1 if packet send, 0 otherwise.
+ * A likely reason for that is `No buffer space available'.
+ */
+static inline int sndpkt_send(struct sndpkt_engine *engine,
 	union net_addr *addr)
 {
-	engine->send_packet(engine, addr);
+	return engine->send_packet(engine, addr);
 }
 
 void end_sndpkt_engine(struct sndpkt_engine *engine);
