@@ -1,12 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <inttypes.h>
 #include <assert.h>
+#include <string.h>
 #include <err.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+
+#include <rdist.h>
+#include <strarray.h>
 
 /* Replace '\0' in @buf to @ch, and return the numer of lines in @buf.
  *
@@ -127,4 +130,81 @@ void print_array(char **array, uint64_t size)
 	uint64_t i;
 	for (i = 0; i < size; i++)
 		printf("%" PRIu64 ":%s\n", i, array[i]);
+}
+
+static void shuffle_array(char **array, uint64_t size,
+	uint32_t *seeds, int seeds_len)
+{
+	struct unif_state shuffle_dist;
+
+	if (size <= 1)
+		return;
+
+	init_unif(&shuffle_dist, seeds, seeds_len);
+	do {
+		uint64_t b = sample_unif_0_n1(&shuffle_dist, size);
+		if (b) {
+			/* b is not index 0, so swap array[0] and array[b]. */
+			char *tmp = array[0];
+			array[0] = array[b];
+			array[b] = tmp;
+		}
+		array++;
+		size--;
+	} while (size > 1);
+	end_unif(&shuffle_dist);
+}
+
+union net_addr *load_file_as_shuffled_addrs(const char *filename,
+	uint64_t *parray_size, uint32_t *seeds, int seeds_len)
+{
+	char **prefix_array =
+		load_file_as_array(filename, parray_size);
+	union net_addr *addrs, *pa;
+	uint64_t i, bytes;
+
+	if (!(*parray_size))
+		return NULL;
+	shuffle_array(prefix_array, *parray_size, seeds, seeds_len);
+	/*
+	print_array(prefix_array, *parray_size);
+	*/
+
+	bytes = sizeof(*addrs) * (*parray_size);
+	addrs = malloc(bytes);
+	assert(addrs);
+	memset(addrs, 0, bytes);
+
+	/* Convert prefixes into binary addresses. */
+	pa = addrs;
+	for (i = 0; i < *parray_size; i++) {
+		int a, b, c, d, m;
+		assert(sscanf(prefix_array[i], "%i.%i.%i.%i/%i",
+			&a, &b, &c, &d, &m) == 5);
+		assert(0 <= a && a <= 255);
+		assert(0 <= b && b <= 255);
+		assert(0 <= c && c <= 255);
+		assert(0 <= d && d <= 255);
+		assert(8 <= m && m <= 32);
+
+		/* In order to make it an address (it's originally a prefix),
+		 * and avoid multiple prefixes maching the address (IP uses
+		 * longest prefix matching), one has to set the bit just
+		 * after the mask.
+		 */
+		pa->id[0] = a;
+		pa->id[1] =  8 <= m && m < 16 ? b | (0x80 >> (m -  8)) : b;
+		pa->id[2] = 16 <= m && m < 24 ? c | (0x80 >> (m - 16)) : c;
+		pa->id[3] = 24 <= m && m < 32 ? d | (0x80 >> (m < 32)) : d;
+
+		pa++;
+	}
+
+	free_array(prefix_array);
+	return addrs;
+}
+
+void free_net_addr(union net_addr *addrs)
+{
+	free(addrs);
 }
