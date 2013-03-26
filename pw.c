@@ -240,8 +240,8 @@ int main(int argc, char **argv)
 	};
 
 	struct seed s1, s2, node_seed;
-	union net_addr *addrs;
-	uint64_t addrs_count;
+	struct net_prefix *prefixes;
+	uint64_t prefixes_count;
 	struct zipf_cache zcache;
 	struct sndpkt_engine engine;
 	double start, diff, count;
@@ -258,18 +258,18 @@ int main(int argc, char **argv)
 	print_seed("node_seed", &node_seed);
 	*/
 
-	/* Seed @s2 is not used by PW. */
+	/* PW does not use seed @s2. */
 
 	/* Load and shuffle destination addresses. */
-	addrs = load_file_as_shuffled_addrs(args.prefix_filename, &addrs_count,
-		s1.seeds, SEED_UINT32_N);
-	if (!addrs_count)
+	prefixes = load_file_as_shuffled_addrs(args.prefix_filename,
+		&prefixes_count, s1.seeds, SEED_UINT32_N, 1);
+	if (!prefixes_count)
 		err(1, "Prefix file `%s' is empty", args.prefix_filename);
 
 	/* Cache Zipf sampling. */
 	printf("Initializing Zipf cache... ");
 	fflush(stdout);
-	init_zipf_cache(&zcache, addrs_count * 30, args.s, addrs_count,
+	init_zipf_cache(&zcache, prefixes_count * 30, args.s, prefixes_count,
 		node_seed.seeds, SEED_UINT32_N);
 	printf("DONE\n");
 	/*
@@ -283,7 +283,7 @@ int main(int argc, char **argv)
 	count = 0.0;
 	start = now();
 	while (1) {
-		if (!sndpkt_send(&engine, &addrs[index - 1]))
+		if (!sndpkt_send(&engine, &prefixes[index - 1].addr))
 			continue; /* No packet sent. */
 		index = sample_zipf_cache(&zcache);
 		count++;
@@ -297,6 +297,6 @@ int main(int argc, char **argv)
 
 	end_sndpkt_engine(&engine);
 	end_zipf_cache(&zcache);
-	free_net_addr(addrs);
+	free_net_prefix(prefixes);
 	return 0;
 }

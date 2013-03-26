@@ -4,12 +4,16 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
+#include <err.h>
 #include <argp.h>
 
 #include <net/if.h>		/* if_nametoindex()		*/
 #include <arpa/inet.h>		/* inet_pton()			*/
 
 #include <utils.h>
+#include <seeds.h>
+#include <rdist.h>
+#include <strarray.h>
 
 /* Argp's global variables. */
 const char *argp_program_version = "Router keeper 1.0";
@@ -167,23 +171,37 @@ int main(int argc, char **argv)
 
 	int nnodes = args.count + 1;	/* Ports + Router (1).	*/
 	int node_id = nnodes;		/* It is the router.	*/
+	struct seed s1, s2, node_seed;
+	struct net_prefix *prefixes;
+	uint64_t prefixes_count;
+	struct unif_state port_dist;
 
 	/* Read parameters. */
 	argp_parse(&argp, argc, argv, 0, NULL, &args);
 
-	/* TODO Load seeds. */
+	/* Load seeds. */
+	load_seeds(args.run, nnodes, node_id, &s1, &s2, &node_seed);
 
-	/* TODO Load and shuffle destinations. */
+	/* Load and shuffle destination addresses. */
+	prefixes = load_file_as_shuffled_addrs(args.prefix_filename,
+		&prefixes_count, s1.seeds, SEED_UINT32_N, 0);
+	if (!prefixes_count)
+		err(1, "Prefix file `%s' is empty", args.prefix_filename);
 
-	/* TODO Convert destinations to a binary vector. */
+	/* Initialize port numbers. */
+	init_unif(&port_dist, s2.seeds, SEED_UINT32_N);
+	assign_port(prefixes, prefixes_count, args.count, &port_dist);
 
 	/* TODO Load destinations into routing table. */
 	/* TODO Use batch updates! */
 
+	/* TODO Enforce update rate. */
 	/* TODO Loop: */
 		/* TODO Sample destination and new gateway. */
 		/* TODO Update routing table. */
 
+	end_unif(&port_dist);
+	free_net_prefix(prefixes);
 	end_args(&args);
 	return 0;
 }

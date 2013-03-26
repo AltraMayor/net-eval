@@ -8,7 +8,6 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-#include <rdist.h>
 #include <strarray.h>
 
 /* Replace '\0' in @buf to @ch, and return the numer of lines in @buf.
@@ -155,12 +154,12 @@ static void shuffle_array(char **array, uint64_t size,
 	end_unif(&shuffle_dist);
 }
 
-union net_addr *load_file_as_shuffled_addrs(const char *filename,
-	uint64_t *parray_size, uint32_t *seeds, int seeds_len)
+struct net_prefix *load_file_as_shuffled_addrs(const char *filename,
+	uint64_t *parray_size, uint32_t *seeds, int seeds_len, int force_addr)
 {
 	char **prefix_array =
 		load_file_as_array(filename, parray_size);
-	union net_addr *addrs, *pa;
+	struct net_prefix *prefix, *pp;
 	uint64_t i, bytes;
 
 	if (!(*parray_size))
@@ -170,13 +169,12 @@ union net_addr *load_file_as_shuffled_addrs(const char *filename,
 	print_array(prefix_array, *parray_size);
 	*/
 
-	bytes = sizeof(*addrs) * (*parray_size);
-	addrs = malloc(bytes);
-	assert(addrs);
-	memset(addrs, 0, bytes);
+	bytes = sizeof(*prefix) * (*parray_size);
+	prefix = malloc(bytes);
+	assert(prefix);
 
 	/* Convert prefixes into binary addresses. */
-	pa = addrs;
+	pp = prefix;
 	for (i = 0; i < *parray_size; i++) {
 		int a, b, c, d, m;
 		assert(sscanf(prefix_array[i], "%i.%i.%i.%i/%i",
@@ -187,24 +185,37 @@ union net_addr *load_file_as_shuffled_addrs(const char *filename,
 		assert(0 <= d && d <= 255);
 		assert(8 <= m && m <= 32);
 
+		pp->mask = m;
+		if (!force_addr)
+			m = 32;
+
 		/* In order to make it an address (it's originally a prefix),
 		 * and avoid multiple prefixes maching the address (IP uses
 		 * longest prefix matching), one has to set the bit just
 		 * after the mask.
 		 */
-		pa->id[0] = a;
-		pa->id[1] =  8 <= m && m < 16 ? b | (0x80 >> (m -  8)) : b;
-		pa->id[2] = 16 <= m && m < 24 ? c | (0x80 >> (m - 16)) : c;
-		pa->id[3] = 24 <= m && m < 32 ? d | (0x80 >> (m < 32)) : d;
+		pp->addr.id[0] = a;
+		pp->addr.id[1] =  8 <= m && m < 16 ? b | (0x80 >> (m -  8)) : b;
+		pp->addr.id[2] = 16 <= m && m < 24 ? c | (0x80 >> (m - 16)) : c;
+		pp->addr.id[3] = 24 <= m && m < 32 ? d | (0x80 >> (m < 32)) : d;
+		memset(&pp->addr.id[4], 0, sizeof(pp->addr) - 4);
 
-		pa++;
+		pp++;
 	}
 
 	free_array(prefix_array);
-	return addrs;
+	return prefix;
 }
 
-void free_net_addr(union net_addr *addrs)
+void free_net_prefix(struct net_prefix *prefix)
 {
-	free(addrs);
+	free(prefix);
+}
+
+void assign_port(struct net_prefix *prefix, uint64_t array_size, int ports,
+	struct unif_state *unif)
+{
+	uint64_t i;
+	for (i = 0; i < array_size; i++)
+		prefix[i].port = sample_unif_0_n1(unif, ports);
 }
