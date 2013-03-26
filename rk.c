@@ -6,6 +6,8 @@
 #include <string.h>
 #include <err.h>
 #include <argp.h>
+#include <time.h>
+#include <math.h>
 
 #include <net/if.h>		/* if_nametoindex()		*/
 #include <arpa/inet.h>		/* inet_pton()			*/
@@ -166,6 +168,24 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state)
 
 static struct argp argp = {options, parse_opt, adoc, doc};
 
+static void nsleep(double seconds)
+{
+	double integer;
+	double frac = modf(seconds, &integer);
+	struct timespec req = {
+		.tv_sec = integer,
+		.tv_nsec = frac * 1e9,
+	};
+	/*printf("Sleeping %li, %li\n", req.tv_sec, req.tv_nsec);*/
+	while (1) {
+		int rc = nanosleep(&req, &req);
+		if (!rc)
+			return;
+		assert(rc == -1);
+		assert(errno == EINTR);
+	}
+}
+
 int main(int argc, char **argv)
 {
 	struct args args = {
@@ -189,8 +209,9 @@ int main(int argc, char **argv)
 	uint64_t prefixes_count, i;
 	struct unif_state port_dist, prefix_dist;
 	struct mnl_socket *nl;
+	double start, checkpoint, last_now, diff, count;
 	struct port **ports;
-	int last;
+	int last, upd_to_sleep;
 
 	/* Read parameters. */
 	argp_parse(&argp, argc, argv, 0, NULL, &args);
@@ -218,6 +239,7 @@ int main(int argc, char **argv)
 		err(1, "mnl_socket_bind() failed");
 	printf("Loading routing table... ");
 	fflush(stdout);
+	start = now();
 	for (i = 0; i < prefixes_count; i++) {
 		struct net_prefix *pp = &prefixes[i];
 		struct port *pt = &args.ports[pp->port];
@@ -225,13 +247,15 @@ int main(int argc, char **argv)
 			pt->iface, pt->gateway.ip, args.load_update) < 0)
 			err(1, "rtnl_ipv4_rtable_add() failed");
 	}
+	diff = now() - start;
+	if (diff > 0.0)
+		printf("%.1f entry/s ", prefixes_count / diff);
 	printf("DONE\n");
 
 	if (args.update_rate <= 0)
 		goto out;
 
 	/* Keep updating routing table. */
-	/* TODO Enforce update rate. */
 	/* TODO Use batch updates! */
 	/* TODO Add support for XIA. */
 	init_unif(&prefix_dist, node_seed.seeds, SEED_UINT32_N);
@@ -240,6 +264,9 @@ int main(int argc, char **argv)
 	for (i = 0; i < args.count; i++)
 		ports[i] = &args.ports[i];
 	last = args.count - 1;
+	upd_to_sleep = args.update_rate;
+	count = 0.0;
+	checkpoint = start = now();
 	while (1) {
 		/* Sample destination. */
 		uint64_t prefix_sample = sample_unif_0_n1(&prefix_dist,
@@ -268,6 +295,26 @@ int main(int argc, char **argv)
 		if (rtnl_ipv4_rtable_add(nl, pp->addr.ip, pp->mask,
 			new_port->iface, new_port->gateway.ip, 1) < 0)
 			err(1, "rtnl_ipv4_rtable_add() failed");
+
+		count++;
+		upd_to_sleep--;
+		last_now = now();
+		diff = last_now - start;
+		if (diff >= 10.0) {
+			printf("%.1f entry/s\n", count / diff);
+			count = 0.0;
+			last_now = start = now();
+		}
+		if (!upd_to_sleep) {
+			/* Avoid updating faster than prescribed rate. */
+			double d = last_now - checkpoint;
+			if (d < 0)
+				d = 0.0;
+			if (d < 1.0)
+				nsleep(1.0 - d);
+			upd_to_sleep = args.update_rate;
+			checkpoint = now();
+		}
 	}
 	free(ports);
 	end_unif(&prefix_dist);

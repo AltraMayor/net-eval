@@ -4,7 +4,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <err.h>
-#include <time.h>
 #include <argp.h>
 #include <math.h>
 
@@ -214,13 +213,6 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state)
 }
 
 static struct argp argp = {options, parse_opt, NULL, doc};
-
-static double now(void)
-{
-	struct timespec tp;
-	assert(!clock_gettime(CLOCK_MONOTONIC, &tp));
-	return tp.tv_sec + tp.tv_nsec / 1.0e9;
-}
 
 int main(int argc, char **argv)
 {
