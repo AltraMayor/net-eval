@@ -33,12 +33,15 @@ static struct argp_option options[] = {
 	{"prefix",	'p', "FILE",	0, "Name of prefix file"},
 	{"stack",	's', "NET",	0,
 		"Chose between 'ip' and 'xia' stacks"},
+	{"load-update",	'l', 0,		0, "Assume updating instead of "
+		"creating while loading routing table"},
 	{"upd-rate",	'u', "RATE",	0, "Update rate (entrie per second)"},
 	{"run",		'r', "RUN",	0, "Run must be >= 1"},
 	{ 0 }
 };
 
 struct port {
+	int index;
 	int iface;
 	union net_addr gateway;
 };
@@ -46,6 +49,7 @@ struct port {
 struct args {
 	const char *prefix_filename;
 	const char *stack;
+	int load_update;
 	int update_rate;	/* updates per seconds */
 	int run;
 
@@ -94,6 +98,11 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state)
 				"Stack must be either 'ip', or 'xia'");
 		break;
 
+	case 'l':
+		args->load_update = 1;
+		assert(!arg);
+		break;
+
 	case 'u':
 		args->update_rate = arg_to_long(state, arg);
 		if (args->update_rate < 0)
@@ -117,6 +126,7 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state)
 				argp_error(state, "Invalid interface `%s'",
 					arg);
 			make_space(&args->ports, &args->entries, args->count);
+			args->ports[args->count].index = args->count;
 			args->ports[args->count].iface = iface;
 			args->state++;
 			break;
@@ -162,6 +172,7 @@ int main(int argc, char **argv)
 		/* Defaults. */
 		.prefix_filename	= "prefix",
 		.stack			= "ip",
+		.load_update		= 0,
 		.update_rate		= 0,
 		.run			= 1,
 
@@ -176,8 +187,10 @@ int main(int argc, char **argv)
 	struct seed s1, s2, node_seed;
 	struct net_prefix *prefixes;
 	uint64_t prefixes_count, i;
-	struct unif_state port_dist;
+	struct unif_state port_dist, prefix_dist;
 	struct mnl_socket *nl;
+	struct port **ports;
+	int last;
 
 	/* Read parameters. */
 	argp_parse(&argp, argc, argv, 0, NULL, &args);
@@ -207,19 +220,60 @@ int main(int argc, char **argv)
 	fflush(stdout);
 	for (i = 0; i < prefixes_count; i++) {
 		struct net_prefix *pp = &prefixes[i];
-		struct port *port = &args.ports[pp->port];
-		if (rtnl_ipv4_rtable_add(nl, port->iface,
-			pp->addr.ip, pp->mask, port->gateway.ip, 0) < 0)
+		struct port *pt = &args.ports[pp->port];
+		if (rtnl_ipv4_rtable_add(nl, pp->addr.ip, pp->mask,
+			pt->iface, pt->gateway.ip, args.load_update) < 0)
 			err(1, "rtnl_ipv4_rtable_add() failed");
 	}
 	printf("DONE\n");
-	assert(!mnl_socket_close(nl));
 
+	if (args.update_rate <= 0)
+		goto out;
+
+	/* Keep updating routing table. */
 	/* TODO Enforce update rate. */
-	/* TODO Loop: */
-		/* TODO Sample destination and new gateway. */
-		/* TODO Update routing table. */
+	/* TODO Use batch updates! */
+	/* TODO Add support for XIA. */
+	init_unif(&prefix_dist, node_seed.seeds, SEED_UINT32_N);
+	ports = malloc(sizeof(*ports) * args.count);
+	assert(ports);
+	for (i = 0; i < args.count; i++)
+		ports[i] = &args.ports[i];
+	last = args.count - 1;
+	while (1) {
+		/* Sample destination. */
+		uint64_t prefix_sample = sample_unif_0_n1(&prefix_dist,
+			prefixes_count);
+		struct net_prefix *pp = &prefixes[prefix_sample];
 
+ 		/* Sample new gateway. */
+		int port_sample;
+		struct port *new_port;
+		if (pp->port != last) {
+			struct port *temp = ports[pp->port];
+			ports[pp->port] = ports[last];
+			ports[last] = temp;
+		}
+		port_sample = sample_unif_0_n1(&port_dist, last);
+		new_port = ports[port_sample];
+		if (pp->port != last) {
+			struct port *temp = ports[pp->port];
+			ports[pp->port] = ports[last];
+			ports[last] = temp;
+		}
+		assert(pp->port != new_port->index);
+		pp->port = new_port->index;
+
+		/* Update routing table. */
+		if (rtnl_ipv4_rtable_add(nl, pp->addr.ip, pp->mask,
+			new_port->iface, new_port->gateway.ip, 1) < 0)
+			err(1, "rtnl_ipv4_rtable_add() failed");
+	}
+	free(ports);
+	end_unif(&prefix_dist);
+
+out:
+	assert(!mnl_socket_close(nl));
 	end_unif(&port_dist);
 	free_net_prefix(prefixes);
 	end_args(&args);

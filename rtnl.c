@@ -20,8 +20,8 @@ static int nl_request_wait_reply(struct mnl_socket *nl, struct nlmsghdr *nlh)
 		mnl_socket_get_portid(nl), NULL, NULL);
 }
 
-int rtnl_ipv4_rtable_add(struct mnl_socket *nl, int iface, in_addr_t dst,
-	int mask, in_addr_t gw, int update)
+int rtnl_ipv4_rtable_add(struct mnl_socket *nl, in_addr_t dst, int mask,
+	int iface, in_addr_t gw, int update)
 {
 	char buf[MNL_SOCKET_BUFFER_SIZE];
 	struct nlmsghdr *nlh;
@@ -29,8 +29,10 @@ int rtnl_ipv4_rtable_add(struct mnl_socket *nl, int iface, in_addr_t dst,
 
 	nlh = mnl_nlmsg_put_header(buf);
 	nlh->nlmsg_type	= RTM_NEWROUTE;
-	nlh->nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE | NLM_F_ACK |
-		(update ? NLM_F_REPLACE : NLM_F_EXCL);
+
+	nlh->nlmsg_flags = NLM_F_REQUEST | NLM_F_ACK |
+		(update ? NLM_F_REPLACE : (NLM_F_CREATE | NLM_F_EXCL));
+
 	nlh->nlmsg_seq = time(NULL);	/* XXX Get a better sequence. */
 
 	rtm = mnl_nlmsg_put_extra_header(nlh, sizeof(struct rtmsg));
