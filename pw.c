@@ -8,6 +8,7 @@
 #include <argp.h>
 #include <math.h>
 
+#include <utils.h>
 #include <seeds.h>
 #include <rdist.h>
 #include <strarray.h>
@@ -53,17 +54,6 @@ struct args {
 	int node_id;
 	int run;
 };
-
-static long arg_to_long(const struct argp_state *state, char *arg)
-{
-	char *end;
-	long l = strtol(arg, &end, 0);
-	if (!arg)
-		argp_error(state, "An integer must be provided");
-	if (!*arg || *end)
-		argp_error(state, "'%s' is not an integer", arg);
-	return l;
-}
 
 /* XXX Copied from xiaconf/xip/utils.c. This function should go to
  * an XIA library.

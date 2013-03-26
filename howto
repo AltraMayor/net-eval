@@ -6,6 +6,8 @@ cd ..
 
 # Once updating dSFMT, copy dSFMT.h into include/
 
+### Compile common objects
+gcc -c -Wall -Iinclude utils.c
 
 ### Compile pw
 gcc -c -Wall -Iinclude seeds.c
@@ -13,9 +15,9 @@ gcc -c -Wall -Iinclude -DDSFMT_MEXP=216091 rdist.c
 gcc -c -Wall -Iinclude -DDSFMT_MEXP=216091 strarray.c
 gcc -c -Wall -Iinclude sndpkt.c
 gcc -c -Wall -Iinclude -DDSFMT_MEXP=216091 pw.c
-gcc -o pw seeds.o rdist.o strarray.o sndpkt.o \
+gcc -o pw seeds.o rdist.o strarray.o sndpkt.o utils.o \
 	dSFMT-src-2.2.1/dSFMT.o pw.o -lm -lrt
 
 ### Compile rk
 gcc -c -Wall -Iinclude rk.c
-gcc -o rk rk.o
+gcc -o rk utils.o rk.o
