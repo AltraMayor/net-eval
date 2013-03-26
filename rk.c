@@ -9,11 +9,13 @@
 
 #include <net/if.h>		/* if_nametoindex()		*/
 #include <arpa/inet.h>		/* inet_pton()			*/
+#include <libmnl/libmnl.h>
 
 #include <utils.h>
 #include <seeds.h>
 #include <rdist.h>
 #include <strarray.h>
+#include <rtnl.h>
 
 /* Argp's global variables. */
 const char *argp_program_version = "Router keeper 1.0";
@@ -173,8 +175,9 @@ int main(int argc, char **argv)
 	int node_id = nnodes;		/* It is the router.	*/
 	struct seed s1, s2, node_seed;
 	struct net_prefix *prefixes;
-	uint64_t prefixes_count;
+	uint64_t prefixes_count, i;
 	struct unif_state port_dist;
+	struct mnl_socket *nl;
 
 	/* Read parameters. */
 	argp_parse(&argp, argc, argv, 0, NULL, &args);
@@ -192,8 +195,25 @@ int main(int argc, char **argv)
 	init_unif(&port_dist, s2.seeds, SEED_UINT32_N);
 	assign_port(prefixes, prefixes_count, args.count, &port_dist);
 
-	/* TODO Load destinations into routing table. */
+	/* Load destinations into routing table. */
 	/* TODO Use batch updates! */
+	/* TODO Add support for XIA. */
+	nl = mnl_socket_open(NETLINK_ROUTE);
+	if (!nl)
+		err(1, "mnl_socket_open() failed");
+	if (mnl_socket_bind(nl, 0, MNL_SOCKET_AUTOPID) < 0)
+		err(1, "mnl_socket_bind() failed");
+	printf("Loading routing table... ");
+	fflush(stdout);
+	for (i = 0; i < prefixes_count; i++) {
+		struct net_prefix *pp = &prefixes[i];
+		struct port *port = &args.ports[pp->port];
+		if (rtnl_ipv4_rtable_add(nl, port->iface,
+			pp->addr.ip, pp->mask, port->gateway.ip, 0) < 0)
+			err(1, "rtnl_ipv4_rtable_add() failed");
+	}
+	printf("DONE\n");
+	assert(!mnl_socket_close(nl));
 
 	/* TODO Enforce update rate. */
 	/* TODO Loop: */

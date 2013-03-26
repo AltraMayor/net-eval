@@ -1,3 +1,15 @@
+### Dependencies
+
+# For development
+sudo apt-get install libmnl-dev
+
+# For use
+sudo apt-get install libmnl0
+
+# If not installed, one should get an error message similar to this one:
+#rk: error while loading shared libraries: libmnl.so.0: cannot open shared object file: No such file or directory
+
+
 ### Preparing dSFMT
 cd dSFMT-src-2.2.1
 gcc -DDSFMT_DO_NOT_USE_OLD_NAMES -DDSFMT_MEXP=216091 -msse2 -DHAVE_SSE2 \
@@ -6,11 +18,13 @@ cd ..
 
 # Once updating dSFMT, copy dSFMT.h into include/
 
+
 ### Compile common objects
 gcc -c -Wall -Iinclude seeds.c
 gcc -c -Wall -Iinclude -DDSFMT_MEXP=216091 rdist.c
 gcc -c -Wall -Iinclude -DDSFMT_MEXP=216091 strarray.c
 gcc -c -Wall -Iinclude utils.c
+
 
 ### Compile pw
 gcc -c -Wall -Iinclude -DDSFMT_MEXP=216091 sndpkt.c
@@ -18,7 +32,9 @@ gcc -c -Wall -Iinclude -DDSFMT_MEXP=216091 pw.c
 gcc -o pw seeds.o rdist.o strarray.o sndpkt.o utils.o \
 	dSFMT-src-2.2.1/dSFMT.o pw.o -lm -lrt
 
+
 ### Compile rk
+gcc -c -Wall -Iinclude rtnl.c
 gcc -c -Wall -Iinclude -DDSFMT_MEXP=216091 rk.c
-gcc -o rk seeds.o rdist.o strarray.o utils.o \
-	dSFMT-src-2.2.1/dSFMT.o rk.o -lm
+gcc -o rk seeds.o rdist.o strarray.o utils.o rtnl.o \
+	dSFMT-src-2.2.1/dSFMT.o rk.o -lm -l mnl
