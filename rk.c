@@ -41,12 +41,6 @@ static struct argp_option options[] = {
 	{ 0 }
 };
 
-struct port {
-	int index;
-	int iface;
-	union net_addr gateway;
-};
-
 struct args {
 	const char *prefix_filename;
 	const char *stack;
@@ -83,6 +77,32 @@ static void end_args(struct args *args)
 	args->ports = NULL;
 }
 
+/* XXX The reason only HIDs are being accepted here is because there's no
+ * XIA library that makes handling DAGs easy yet, and we don't want to
+ * duplicate even more code before the library is written.
+ * The function below should go away once the library is available.
+ */
+static void assign_addr_hex(struct argp_state *state, union net_addr *addr,
+	const char *hex)
+{
+	const int hex_size = 2 * XIA_XID_MAX;
+	const char *p = hex;
+	int i;
+	
+	if (strnlen(hex, hex_size + 1) != hex_size)
+		argp_error(state, "ID `%s' is not %i characters long",
+			hex, hex_size);
+	for (i = 0; i < XIA_XID_MAX; i++) {
+		int h;
+		if (!sscanf(p, "%2x", &h))
+			argp_error(state,
+				"Substring `%c%c' in ID `%s' is not hexadecimal",
+				p[0], p[1], hex);
+		addr->id[i] = h;
+		p += 2;
+	}
+}
+
 static error_t parse_opt (int key, char *arg, struct argp_state *state)
 {
 	struct args *args = state->input;
@@ -107,13 +127,13 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state)
 	case 'u':
 		args->update_rate = arg_to_long(state, arg);
 		if (args->update_rate < 0)
-			argp_error(state,"Update rate must be >= 0");
+			argp_error(state, "Update rate must be >= 0");
 		break;
 
 	case 'r':
 		args->run = arg_to_long(state, arg);
 		if (args->run < 1)
-			argp_error(state,"Run must be >= 1");
+			argp_error(state, "Run must be >= 1");
 		break;
 
 	case ARGP_KEY_INIT:
@@ -133,14 +153,23 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state)
 			break;
 		}
 		case 1:
-			/* TODO Add support for XIA. */
-			assert(!strcmp(args->stack, "ip"));
-			memset(&args->ports[args->count].gateway, 0,
-				sizeof(args->ports[0].gateway));
-			if (!inet_pton(AF_INET, arg,
-				&args->ports[args->count].gateway.ip))
-				argp_error(state, "Invalid IP address `%s'",
+			if (!strcmp(args->stack, "ip")) {
+				memset(&args->ports[args->count].gateway, 0,
+					sizeof(args->ports[0].gateway));
+				if (!inet_pton(AF_INET, arg,
+					&args->ports[args->count].gateway.ip))
+					argp_error(state,
+						"Invalid IP address `%s'", arg);
+			} else if (!strcmp(args->stack, "xia")) {
+				assign_addr_hex(state,
+					&args->ports[args->count].gateway,
 					arg);
+			} else {
+				argp_error(state,
+					"Stack `%s' is not supported",
+					args->stack);
+			}
+
 			args->count++;
 			args->state = 0; /* Go back to initial state. */
 			break;
@@ -204,6 +233,7 @@ int main(int argc, char **argv)
 	int nnodes = args.count + 1;	/* Ports + Router (1).	*/
 	int node_id = nnodes;		/* It is the router.	*/
 	struct seed s1, s2, node_seed;
+	int force_addr;
 	struct net_prefix *prefixes;
 	uint64_t prefixes_count, i;
 	struct unif_state port_dist, prefix_dist;
@@ -219,8 +249,9 @@ int main(int argc, char **argv)
 	load_seeds(args.run, nnodes, node_id, &s1, &s2, &node_seed);
 
 	/* Load and shuffle destination addresses. */
+	force_addr = !!strcmp(args.stack, "ip"); /* Only IP uses CIDR. */
 	prefixes = load_file_as_shuffled_addrs(args.prefix_filename,
-		&prefixes_count, s1.seeds, SEED_UINT32_N, 0);
+		&prefixes_count, s1.seeds, SEED_UINT32_N, force_addr);
 	if (!prefixes_count)
 		err(1, "Prefix file `%s' is empty", args.prefix_filename);
 
@@ -229,16 +260,14 @@ int main(int argc, char **argv)
 	assign_port(prefixes, prefixes_count, args.count, &port_dist);
 
 	/* Load destinations into routing table. */
-	/* TODO Add support for XIA. */
-	init_rtnl_batch(&b);
+	init_rtnl_batch(&b, args.stack);
 	printf("Loading routing table... ");
 	fflush(stdout);
 	start = now();
 	for (i = 0; i < prefixes_count; i++) {
 		struct net_prefix *pp = &prefixes[i];
 		struct port *pt = &args.ports[pp->port];
-		add_ipv4_route_to_batch(&b, pp->addr.ip, pp->mask,
-			pt->iface, pt->gateway.ip, args.load_update);
+		rtnl_add_route_to_batch(&b, pp, pt, args.load_update);
 	}
 	flush_rtnl_batch(&b);
 	diff = now() - start;
@@ -250,7 +279,6 @@ int main(int argc, char **argv)
 		goto out;
 
 	/* Keep updating routing table. */
-	/* TODO Add support for XIA. */
 	init_unif(&prefix_dist, node_seed.seeds, SEED_UINT32_N);
 	ports = malloc(sizeof(*ports) * args.count);
 	assert(ports);
@@ -285,8 +313,7 @@ int main(int argc, char **argv)
 		pp->port = new_port->index;
 
 		/* Update routing table. */
-		add_ipv4_route_to_batch(&b, pp->addr.ip, pp->mask,
-			new_port->iface, new_port->gateway.ip, 1);
+		rtnl_add_route_to_batch(&b, pp, new_port, 1);
 
 		count++;
 		upd_to_sleep--;

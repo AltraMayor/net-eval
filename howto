@@ -34,7 +34,7 @@ gcc -o pw seeds.o rdist.o strarray.o sndpkt.o utils.o \
 
 
 ### Compile rk
-gcc -c -Wall -Iinclude rtnl.c
+gcc -c -Wall -Iinclude -DDSFMT_MEXP=216091 rtnl.c
 gcc -c -Wall -Iinclude -DDSFMT_MEXP=216091 rk.c
 gcc -o rk seeds.o rdist.o strarray.o utils.o rtnl.o \
 	dSFMT-src-2.2.1/dSFMT.o rk.o -lm -lrt -lmnl

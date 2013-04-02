@@ -4,6 +4,8 @@
 #include <err.h>
 #include <time.h>
 #include <linux/rtnetlink.h>
+#include <libmnl/libmnl.h>
+#include <arpa/inet.h>
 
 #include <rtnl.h>
 
@@ -33,6 +35,47 @@ static void put_ipv4_rtable_add(void *buf, int seq, in_addr_t dst, int mask,
 	mnl_attr_put_u32(nlh, RTA_DST, dst);
 	mnl_attr_put_u32(nlh, RTA_OIF, iface);
 	mnl_attr_put_u32(nlh, RTA_GATEWAY, gw);
+}
+
+/* XXX These constants should come from the kernel once XIA goes mainline. */
+/* Autonomous Domain Principal */
+#define XIDTYPE_AD (__cpu_to_be32(0x10))
+/* Host Principal */
+#define XIDTYPE_HID (__cpu_to_be32(0x11))
+#define AF_XIA 41
+#define XRTABLE_MAIN_INDEX 1
+
+static void put_xip_rtable_add(void *buf, int seq, const union net_addr *from,
+	const union net_addr *gateway, int update)
+{
+	struct nlmsghdr *nlh;
+	struct rtmsg *rtm;
+	struct xia_xid dst, gw;
+
+	nlh = mnl_nlmsg_put_header(buf);
+	nlh->nlmsg_type	= RTM_NEWROUTE;
+	nlh->nlmsg_flags = NLM_F_REQUEST |
+		(update ? NLM_F_REPLACE : (NLM_F_CREATE | NLM_F_EXCL));
+	nlh->nlmsg_seq = seq;
+
+	rtm = mnl_nlmsg_put_extra_header(nlh, sizeof(struct rtmsg));
+	rtm->rtm_family = AF_XIA;
+	rtm->rtm_dst_len = sizeof(dst);
+	rtm->rtm_src_len = 0;
+	rtm->rtm_tos = 0;
+	rtm->rtm_protocol = RTPROT_STATIC;
+	rtm->rtm_table = XRTABLE_MAIN_INDEX;
+	rtm->rtm_type = RTN_UNICAST;
+	rtm->rtm_scope = RT_SCOPE_UNIVERSE;
+	rtm->rtm_flags = 0;
+
+	dst.xid_type = XIDTYPE_AD;
+	memmove(dst.xid_id, from->id, sizeof(dst.xid_id));
+	gw.xid_type = XIDTYPE_HID;
+	memmove(gw.xid_id, gateway->id, sizeof(gw.xid_id));
+
+	mnl_attr_put(nlh, RTA_DST, sizeof(dst), &dst);
+	mnl_attr_put(nlh, RTA_GATEWAY, sizeof(gw), &gw);
 }
 
 static int cb_err(const struct nlmsghdr *nlh, void *data)
@@ -111,7 +154,30 @@ int flush_rtnl_batch(struct rtnl_batch *b)
 	return 1;
 }
 
-void init_rtnl_batch(struct rtnl_batch *b)
+static void add_ipv4_route_to_batch(struct rtnl_batch *b,
+	const struct net_prefix *prefix, const struct port *port, int update)
+{
+	put_ipv4_rtable_add(mnl_nlmsg_batch_current(b->batch), b->seq++,
+		prefix->addr.ip, prefix->mask, port->iface, port->gateway.ip,
+		update);
+
+	/* Is there room for more messages in this batch? */
+	if (!mnl_nlmsg_batch_next(b->batch))
+		flush_rtnl_batch(b);
+}
+
+static void add_xip_route_to_batch(struct rtnl_batch *b,
+	const struct net_prefix *prefix, const struct port *port, int update)
+{
+	put_xip_rtable_add(mnl_nlmsg_batch_current(b->batch), b->seq++,
+		&prefix->addr, &port->gateway, update);
+
+	/* Is there room for more messages in this batch? */
+	if (!mnl_nlmsg_batch_next(b->batch))
+		flush_rtnl_batch(b);
+}
+
+void init_rtnl_batch(struct rtnl_batch *b, const char *stack)
 {
 	b->snd_buf = malloc(MNL_SOCKET_BUFFER_SIZE * 2);
 	assert(b->snd_buf);
@@ -132,17 +198,14 @@ void init_rtnl_batch(struct rtnl_batch *b)
 		err(1, "mnl_nlmsg_batch_start() failed");
 
 	b->seq = time(NULL);
-}
 
-void add_ipv4_route_to_batch(struct rtnl_batch *b,
-	in_addr_t dst, int mask, int iface, in_addr_t gw, int update)
-{
-	put_ipv4_rtable_add(mnl_nlmsg_batch_current(b->batch), b->seq++,
-		dst, mask, iface, gw, update);
-
-	/* Is there room for more messages in this batch? */
-	if (!mnl_nlmsg_batch_next(b->batch))
-		flush_rtnl_batch(b);
+	if (!strcmp(stack, "ip")) {
+		b->add_route = add_ipv4_route_to_batch;
+	} else if (!strcmp(stack, "xia")) {
+		b->add_route = add_xip_route_to_batch;
+	} else {
+		errx(1, "Stack `%s' is not supported", stack);
+	}
 }
 
 void end_rtnl_batch(struct rtnl_batch *b)
