@@ -197,7 +197,7 @@ struct net_prefix *load_file_as_shuffled_addrs(const char *filename,
 		pp->addr.id[0] = a;
 		pp->addr.id[1] =  8 <= m && m < 16 ? b | (0x80 >> (m -  8)) : b;
 		pp->addr.id[2] = 16 <= m && m < 24 ? c | (0x80 >> (m - 16)) : c;
-		pp->addr.id[3] = 24 <= m && m < 32 ? d | (0x80 >> (m < 32)) : d;
+		pp->addr.id[3] = 24 <= m && m < 32 ? d | (0x80 >> (m - 24)) : d;
 		memset(&pp->addr.id[4], 0, sizeof(pp->addr) - 4);
 
 		pp++;

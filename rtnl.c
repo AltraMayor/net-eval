@@ -76,6 +76,12 @@ static void put_xip_rtable_add(void *buf, int seq, const union net_addr *from,
 
 	mnl_attr_put(nlh, RTA_DST, sizeof(dst), &dst);
 	mnl_attr_put(nlh, RTA_GATEWAY, sizeof(gw), &gw);
+
+	/*
+	printf("%i: %i.%i.%i.%i -> %02x%02x%02x%02x\n", seq,
+		from->id[0], from->id[1], from->id[2], from->id[3],
+		gateway->id[0], gateway->id[1], gateway->id[2], gateway->id[3]);
+	*/
 }
 
 static int cb_err(const struct nlmsghdr *nlh, void *data)
