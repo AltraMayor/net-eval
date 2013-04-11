@@ -37,6 +37,9 @@ static struct argp_option options[] = {
 	{"node-id",	'd', "ID",	0,
 		"ID of this packet writer [1..(N-1)]"},
 	{"run",		'r', "RUN",	0, "Run must be >= 1"},
+	{"interactive",	'v', NULL,	0,
+		"Allow one to interactively control the number of packets sent"
+		},
 	{ 0 }
 };
 
@@ -52,6 +55,7 @@ struct args {
 	int nnodes;
 	int node_id;
 	int run;
+	int interactive;
 };
 
 /* XXX Copied from xiaconf/xip/utils.c. This function should go to
@@ -206,6 +210,10 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state)
 			argp_error(state,"Run must be >= 1");
 		break;
 
+	case 'v':
+		args->interactive = 1;
+		break;
+
 	default:
 		return ARGP_ERR_UNKNOWN;
 	}
@@ -213,6 +221,35 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state)
 }
 
 static struct argp argp = {options, parse_opt, NULL, doc};
+
+static void drop_line(void)
+{
+	int ch;
+	do {
+		ch = getchar();
+		if (ch == EOF)
+			exit(0);
+	} while (ch != '\n');
+}
+
+static int ask_count(void)
+{
+	int read, n;
+	do {
+		char tail;
+		printf(">");
+		read = scanf("%i%c", &n, &tail);
+		if (!read || tail != '\n') {
+			drop_line(); /* Drop uninterpreted chars. */
+			printf("Please enter the number of packets to send\n");
+			read = 0;
+		} else if (n <= 0) {
+			printf("Please enter only positive numbers\n");
+			read = 0;
+		}
+	} while (!read);
+	return n;
+}
 
 int main(int argc, char **argv)
 {
@@ -229,6 +266,7 @@ int main(int argc, char **argv)
 		.nnodes			= 3,
 		.node_id		= 1,
 		.run			= 1,
+		.interactive		= 0,
 	};
 
 	struct seed s1, s2, node_seed;
@@ -236,7 +274,7 @@ int main(int argc, char **argv)
 	uint64_t prefixes_count;
 	struct zipf_cache zcache;
 	struct sndpkt_engine engine;
-	double start, diff, count;
+	double start, diff, count, to_send;
 	long index;
 
 	/* Read parameters. */
@@ -273,17 +311,25 @@ int main(int argc, char **argv)
 		args.dst_mac, args.dst_mac_len, args.dst_addr_type);
 	index = sample_zipf_cache(&zcache);
 	count = 0.0;
+	to_send = args.interactive ? ask_count() : 0.0;
 	start = now();
 	while (1) {
 		if (!sndpkt_send(&engine, &prefixes[index - 1].addr))
 			continue; /* No packet sent. */
 		index = sample_zipf_cache(&zcache);
 		count++;
-		diff = now() - start;
-		if (diff >= 10.0) {
-			printf("%.1f pps\n", count / diff);
-			count = 0.0;
-			start = now();
+
+		if (!args.interactive) {
+			diff = now() - start;
+			if (diff >= 10.0) {
+				printf("%.1f pps\n", count / diff);
+				count = 0.0;
+				start = now();
+			}
+		} else {
+			printf("Packet %.0f sent\n", count);
+			if (count >= to_send)
+				to_send = count + ask_count();
 		}
 	}
 
