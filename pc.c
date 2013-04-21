@@ -275,6 +275,8 @@ int main(int argc, char **argv)
 	};
 
 	int i;
+	FILE *f;
+	double start, diff;
 
 	/* Read parameters. */
 	argp_parse(&argp, argc, argv, 0, NULL, &args);
@@ -289,14 +291,28 @@ int main(int argc, char **argv)
 	if (args.parents)
 		assert(!close(mkdir_parents(args.file)));
 
-	/* TODO Create sampling file. */
+	/* Create sampling file. */
+	f = fopen(args.file, "w");
+	if (!f)
+		err(1, "Can't open file `%s'", args.file);
+	/* TODO Add header to file. */
 
 	/* TODO Daemonize. */
 
-	/* TODO Loop: */
+	start = now();
+	while (1) {
 		/* TODO Sample measurements and save to file. */
-		/* TODO Sleep. */
+		printf("TODO Collect data!\n");
+		if (fflush(f))
+			err(1, "Can't save content of file `%s'", args.file);
 
+		diff = now() - start;
+		if (diff < args.sleep)
+			nsleep(args.sleep - diff);
+		start = now();
+	}
+
+	assert(!fclose(f));
 	end_args(&args);
 	return 0;
 }

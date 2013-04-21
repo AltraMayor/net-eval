@@ -6,8 +6,6 @@
 #include <string.h>
 #include <err.h>
 #include <argp.h>
-#include <time.h>
-#include <math.h>
 
 #include <net/if.h>		/* if_nametoindex()		*/
 #include <arpa/inet.h>		/* inet_pton()			*/
@@ -195,24 +193,6 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
 }
 
 static struct argp argp = {options, parse_opt, adoc, doc};
-
-static void nsleep(double seconds)
-{
-	double integer;
-	double frac = modf(seconds, &integer);
-	struct timespec req = {
-		.tv_sec = integer,
-		.tv_nsec = frac * 1e9,
-	};
-	/*printf("Sleeping %li, %li\n", req.tv_sec, req.tv_nsec);*/
-	while (1) {
-		int rc = nanosleep(&req, &req);
-		if (!rc)
-			return;
-		assert(rc == -1);
-		assert(errno == EINTR);
-	}
-}
 
 int main(int argc, char **argv)
 {
