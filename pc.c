@@ -297,7 +297,9 @@ int main(int argc, char **argv)
 		err(1, "Can't open file `%s'", args.file);
 	/* TODO Add header to file. */
 
-	/* TODO Daemonize. */
+	/* Daemonize. */
+	if (args.daemon && daemon(1, 1))
+		err(1, "Can't daemonize");
 
 	start = now();
 	while (1) {
