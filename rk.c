@@ -55,15 +55,15 @@ struct args {
 	struct port *ports;
 };
 
-static void make_space(struct port **ports, int *pentries, int count)
+static void make_space(struct args *args)
 {
 	size_t bytes;
-	if (*pentries > count)
+	if (args->entries > args->count)
 		return;
-	*pentries = (!*pentries) ? 1 : 2 * (*pentries);
-	bytes = (*pentries) * sizeof(**ports);
-	*ports = realloc(*ports, bytes);
-	assert(*ports);
+	args->entries = !args->entries ? 1 : 2 * args->entries;
+	bytes = args->entries * sizeof(*args->ports);
+	args->ports = realloc(args->ports, bytes);
+	assert(args->ports);
 }
 
 static void end_args(struct args *args)
@@ -103,7 +103,7 @@ static void assign_addr_hex(struct argp_state *state, union net_addr *addr,
 	}
 }
 
-static error_t parse_opt (int key, char *arg, struct argp_state *state)
+static error_t parse_opt(int key, char *arg, struct argp_state *state)
 {
 	struct args *args = state->input;
 
@@ -146,7 +146,7 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state)
 			if (!iface)
 				argp_error(state, "Invalid interface `%s'",
 					arg);
-			make_space(&args->ports, &args->entries, args->count);
+			make_space(args);
 			args->ports[args->count].index = args->count;
 			args->ports[args->count].iface = iface;
 			args->state++;

@@ -140,7 +140,7 @@ static int lladdr_pton(const char *str, unsigned char *lladdr, int alen)
 	return count;
 }
 
-static error_t parse_opt (int key, char *arg, struct argp_state *state)
+static error_t parse_opt(int key, char *arg, struct argp_state *state)
 {
 	struct args *args = state->input;
 
