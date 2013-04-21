@@ -41,5 +41,6 @@ gcc -o rk seeds.o rdist.o strarray.o utils.o rtnl.o \
 	dSFMT-src-2.2.1/dSFMT.o rk.o -lm -lrt -lmnl
 
 ### Compile pc
+gcc -c -Wall -Iinclude ebt.c
 gcc -c -Wall -Iinclude pc.c
-gcc -o pc utils.o pc.o -lrt
+gcc -o pc ebt.o utils.o pc.o -lrt
