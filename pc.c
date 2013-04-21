@@ -2,15 +2,19 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <alloca.h>
 #include <assert.h>
 #include <string.h>
 #include <err.h>
+#include <errno.h>
 #include <argp.h>
 
 #include <net/if.h>		/* if_nametoindex() */
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 
 #include <utils.h>
 
@@ -199,6 +203,56 @@ static void add_rule(const char *ebtables, const char *stack,
 	}
 }
 
+static char *skip_slash(char *p)
+{
+	while (*p == '/')
+		p++;
+	return p;
+}
+
+static int _mkdir_parents(int dd, char *file)
+{
+	char *p = strchr(file, '/');
+	int new_dd;
+
+	if (!p) {
+		/* There is no folder to create. */
+		return dd;
+	}
+
+	*p = '\0';
+	new_dd = openat(dd, file, O_DIRECTORY);
+	if (new_dd < 0) {
+		if (errno == ENOENT) {
+			if (mkdirat(dd, file, 0770))
+				err(1, "Can't create directory `%s'", file);
+			new_dd = openat(dd, file, O_DIRECTORY);
+		}
+		if (new_dd < 0)
+			err(1, "Can't open directory `%s'", file);
+	}
+	assert(!close(dd));
+	return _mkdir_parents(new_dd, skip_slash(p + 1));
+}
+
+/* Return the directory descriptor where @file should be created. */
+static int mkdir_parents(const char *file)
+{
+	char *copy_file;
+	const char *path;
+	int dd;
+
+	copy_file = alloca(strlen(file) + 1);
+	assert(copy_file);
+	strcpy(copy_file, file);
+
+	path = (copy_file[0] == '/') ? "/" : ".";
+	dd = open(path, O_DIRECTORY);
+	if (dd < 0)
+		err(1, "Can't open directory `%s'", path);
+	return _mkdir_parents(dd, skip_slash(copy_file));
+}
+
 int main(int argc, char **argv)
 {
 	struct args args = {
@@ -209,6 +263,10 @@ int main(int argc, char **argv)
 		.sleep		= 10,
 		.parents	= 0,
 		.daemon		= 0,
+
+		/* This parameter expects something like
+		 * "experiment/stack/column/run".
+		 */
 		.file		= NULL,
 
 		.count		= 0,
@@ -227,7 +285,9 @@ int main(int argc, char **argv)
 			add_rule(args.ebtables, args.stack, args.ifs[i]);
 	}
 
-	/* TODO Create full path for file. */
+	/* Create parent paths of @args.file. */
+	if (args.parents)
+		assert(!close(mkdir_parents(args.file)));
 
 	/* TODO Create sampling file. */
 
