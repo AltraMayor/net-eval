@@ -4,9 +4,14 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
+#include <err.h>
 #include <argp.h>
 
 #include <net/if.h>		/* if_nametoindex() */
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
 #include <utils.h>
 
 /* Argp's global variables. */
@@ -140,6 +145,60 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
 
 static struct argp argp = {options, parse_opt, adoc, doc};
 
+static const char *stack_to_proto(const char *stack)
+{
+	if (!strcmp(stack, "ip"))
+		return "IPv4";
+	if (!strcmp(stack, "xia"))
+		return "0xc0de";
+	err(1, "Unknown stack `%s'", stack);
+}
+
+/* XXX add_rule() calls ebtables(8) to add rules because the kernel's
+ * interface to do so is not trivial.
+ */
+static void add_rule(const char *ebtables, const char *stack,
+	const char *if_name)
+{
+	pid_t pid = fork();
+	switch (pid) {
+	case 0: {
+		/* The const qualifier is not being lost here because
+		 * execv() is called afterwards.
+		 */
+		char *argv[] = {(char *)ebtables, "-A", "OUTPUT", "--proto",
+			(char *)stack_to_proto(stack), "--out-if",
+			(char *)if_name, "--jump", "DROP", NULL};
+		execv(ebtables, argv);
+		err(1, "Can't exec `%s'", ebtables);
+		break; /* Redundancy, execution never reaches here. */
+	}
+
+	case -1:
+		err(1, "Can't fork");
+		break; /* Redundancy, execution never reaches here. */
+
+	default: {
+		/* Parent. */
+		int status;
+		if (waitpid(pid, &status, 0) < 0)
+			err(1, "waitpid() failed");
+		if (!WIFEXITED(status))
+			errx(1, "ebtables(8) at `%s' has terminated abnormally",
+				ebtables);
+		if (WIFSIGNALED(status))
+			errx(1, "ebtables(8) at `%s' was terminated by signal %i",
+			ebtables, WTERMSIG(status));
+		assert(!WIFSTOPPED(status));
+		if (WEXITSTATUS(status))
+			errx(1, "ebtables(8) at `%s' has terminated with status %i",
+				ebtables, WEXITSTATUS(status));
+		break;
+	}
+
+	}
+}
+
 int main(int argc, char **argv)
 {
 	struct args args = {
@@ -157,10 +216,16 @@ int main(int argc, char **argv)
 		.ifs		= NULL,
 	};
 
+	int i;
+
 	/* Read parameters. */
 	argp_parse(&argp, argc, argv, 0, NULL, &args);
 
-	/* TODO Install ebtables rules. */
+	/* Install ebtables(8) rules. */
+	if (args.add_rules) {
+		for (i = 0; i < args.count; i++)
+			add_rule(args.ebtables, args.stack, args.ifs[i]);
+	}
 
 	/* TODO Create full path for file. */
 
