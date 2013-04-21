@@ -41,4 +41,4 @@ gcc -o rk seeds.o rdist.o strarray.o utils.o rtnl.o \
 
 ### Compile pc
 gcc -c -Wall -Iinclude pc.c
-gcc -o pc pc.o
+gcc -o pc utils.o pc.o -lrt
