@@ -269,3 +269,20 @@ void ebt_write_rates_to_file(int sk, const char *stack, FILE *f,
 	prv_cnt->pcnt = new_cnt.pcnt;
 	prv_cnt->bcnt = new_cnt.bcnt;
 }
+
+static void add_rules(struct ebt_replace *repl, struct ebt_entry *e,
+	struct ebt_counter *cnt, void *arg)
+{
+	int *pcount = arg;
+	(*pcount)++;
+}
+
+int ebt_rule_count(int sk, const char *stack)
+{
+	struct ebt_replace *repl = retrieve_repl(sk);
+	int count = 0;
+	assert(repl);
+	scan_output(repl, stack_to_ethproto(stack), add_rules, &count);
+	free_repl(repl);
+	return count;
+}

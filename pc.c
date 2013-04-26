@@ -218,7 +218,7 @@ int main(int argc, char **argv)
 		.ifs		= NULL,
 	};
 
-	int i, sk;
+	int i, sk, rcount;
 	FILE *f;
 	double start;
 	struct ebt_counter *cnt;
@@ -236,10 +236,20 @@ int main(int argc, char **argv)
 	if (args.file && args.parents)
 		assert(!close(mkdir_parents(args.file)));
 
-	/* Create sampling file. */
+	/* Test that only the expected ebtables(8) rules are in place.
+	 * This is important to avoid silently wrong measurements.
+	 */
 	sk = ebt_socket();
 	if (sk < 0)
 		err(1, "Can't get a socket");
+	rcount = ebt_rule_count(sk, args.stack);
+	if (rcount != args.count)
+		errx(1, "There is a mismatch between the number of ebtables(8) rules installed (= %i) and the number of monitored interfaces (= %i)",
+		rcount, args.count);
+	if (!rcount)
+		errx(1, "There is no ebtables(8) rules to measure");
+
+	/* Create sampling file. */
 	if (args.file) {
 		f = fopen(args.file, "w");
 		if (!f)

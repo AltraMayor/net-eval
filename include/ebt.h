@@ -26,4 +26,6 @@ void ebt_free_cnt(struct ebt_counter *cnt);
 void ebt_write_rates_to_file(int sk, const char *stack, FILE *f,
 	double delta_t, struct ebt_counter *prv_cnt);
 
+int ebt_rule_count(int sk, const char *stack);
+
 #endif	/* _EBT_H */
