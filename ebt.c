@@ -133,17 +133,17 @@ static void free_repl(struct ebt_replace *repl)
 }
 
 typedef void (*scan_fun_t)(struct ebt_replace *repl, struct ebt_entry *e,
-	struct ebt_counter *cnt, FILE *f);
+	struct ebt_counter *cnt, void *arg);
 
 static int _scan_output(struct ebt_entry *e, struct ebt_replace *repl,
-	__be16 ethproto, int *pprint, int *pindex, scan_fun_t fun, FILE *f)
+	__be16 ethproto, int *pprint, int *pindex, scan_fun_t fun, void *arg)
 {
 	if (e->bitmask & EBT_ENTRY_OR_ENTRIES) {
 		/* An entry. */
 		if (!*pprint)
 			return 0;
 		if (e->ethproto == ethproto)
-			fun(repl, e, &repl->counters[*pindex], f);
+			fun(repl, e, &repl->counters[*pindex], arg);
 		(*pindex)++;
 	} else {
 		/* A chain. */
@@ -160,7 +160,7 @@ static int _scan_output(struct ebt_entry *e, struct ebt_replace *repl,
 }
 
 static void scan_output(struct ebt_replace *repl, __be16 ethproto,
-	scan_fun_t fun, FILE *f)
+	scan_fun_t fun, void *arg)
 {
 	int print, index;
 
@@ -169,7 +169,7 @@ static void scan_output(struct ebt_replace *repl, __be16 ethproto,
 
 	print = index = 0;
 	EBT_ENTRY_ITERATE(repl->entries, repl->entries_size, _scan_output,
-		repl, ethproto, &print, &index, fun, f);
+		repl, ethproto, &print, &index, fun, arg);
 }
 
 static __be16 stack_to_ethproto(const char *stack)
@@ -181,9 +181,10 @@ static __be16 stack_to_ethproto(const char *stack)
 	err(1, "Unknown stack `%s'", stack);
 }
 
-static void add_header(struct ebt_replace *repl, struct ebt_entry *e,
-	struct ebt_counter *cnt, FILE *f)
+static void write_header(struct ebt_replace *repl, struct ebt_entry *e,
+	struct ebt_counter *cnt, void *arg)
 {
+	FILE *f = arg;
 	fprintf(f, " %s.pcnt %s.bcnt", e->out, e->out);
 }
 
@@ -192,14 +193,15 @@ void ebt_add_header_to_file(int sk, const char *stack, FILE *f)
 	struct ebt_replace *repl = retrieve_repl(sk);
 	assert(repl);
 	fprintf(f, "time");
-	scan_output(repl, stack_to_ethproto(stack), add_header, f);
+	scan_output(repl, stack_to_ethproto(stack), write_header, f);
 	fprintf(f, "\n");
 	free_repl(repl);
 }
 
-static void add_samples(struct ebt_replace *repl, struct ebt_entry *e,
-	struct ebt_counter *cnt, FILE *f)
+static void write_samples(struct ebt_replace *repl, struct ebt_entry *e,
+	struct ebt_counter *cnt, void *arg)
 {
+	FILE *f = arg;
 	fprintf(f, " %" PRIu64 " %" PRIu64, cnt->pcnt,
 		cnt->pcnt * ETHER_HDR_LEN + cnt->bcnt);
 }
@@ -219,7 +221,51 @@ void ebt_write_sample_to_file(int sk, const char *stack, FILE *f)
 
 	repl = retrieve_repl(sk);
 	assert(repl);
-	scan_output(repl, stack_to_ethproto(stack), add_samples, f);
+	scan_output(repl, stack_to_ethproto(stack), write_samples, f);
 	fprintf(f, "\n");
 	free_repl(repl);
+}
+
+static void add_samples(struct ebt_replace *repl, struct ebt_entry *e,
+	struct ebt_counter *cnt, void *arg)
+{
+	struct ebt_counter *acc_cnt = arg;
+	acc_cnt->pcnt += cnt->pcnt;
+	acc_cnt->bcnt += cnt->bcnt;
+}
+
+static void ebt_init_cnt(int sk, const char *stack, struct ebt_counter *cnt)
+{
+	struct ebt_replace *repl = retrieve_repl(sk);
+	assert(repl);
+	cnt->pcnt = cnt->bcnt = 0;
+	scan_output(repl, stack_to_ethproto(stack), add_samples, cnt);
+	cnt->bcnt += cnt->pcnt * ETHER_HDR_LEN;
+	free_repl(repl);
+}
+
+struct ebt_counter *ebt_create_cnt(int sk, const char *stack)
+{
+	struct ebt_counter *cnt = malloc(sizeof(*cnt));
+	if (!cnt)
+		return NULL;
+	ebt_init_cnt(sk, stack, cnt);
+	return cnt;
+}
+
+void ebt_free_cnt(struct ebt_counter *cnt)
+{
+	free(cnt);
+}
+
+void ebt_write_rates_to_file(int sk, const char *stack, FILE *f,
+	double delta_t, struct ebt_counter *prv_cnt)
+{
+	struct ebt_counter new_cnt;
+	ebt_init_cnt(sk, stack, &new_cnt);
+	fprintf(f, "%.1f pps\t%.1f Bps\n",
+		(new_cnt.pcnt - prv_cnt->pcnt) / delta_t,
+		(new_cnt.bcnt - prv_cnt->bcnt) / delta_t);
+	prv_cnt->pcnt = new_cnt.pcnt;
+	prv_cnt->bcnt = new_cnt.bcnt;
 }

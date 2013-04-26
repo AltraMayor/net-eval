@@ -137,8 +137,6 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
 		if (args->add_rules && args->count < 1)
 			argp_error(state, "There must be at least one "
 				"inteface to add");
-		if (!args->file)
-			argp_error(state, "Option --file is required");
 		break;
 
 	default:
@@ -222,7 +220,8 @@ int main(int argc, char **argv)
 
 	int i, sk;
 	FILE *f;
-	double start, diff;
+	double start;
+	struct ebt_counter *cnt;
 
 	/* Read parameters. */
 	argp_parse(&argp, argc, argv, 0, NULL, &args);
@@ -234,35 +233,58 @@ int main(int argc, char **argv)
 	}
 
 	/* Create parent paths of @args.file. */
-	if (args.parents)
+	if (args.file && args.parents)
 		assert(!close(mkdir_parents(args.file)));
 
 	/* Create sampling file. */
 	sk = ebt_socket();
 	if (sk < 0)
 		err(1, "Can't get a socket");
-	f = fopen(args.file, "w");
-	if (!f)
-		err(1, "Can't open file `%s'", args.file);
-	ebt_add_header_to_file(sk, args.stack, f);
+	if (args.file) {
+		f = fopen(args.file, "w");
+		if (!f)
+			err(1, "Can't open file `%s'", args.file);
+		ebt_add_header_to_file(sk, args.stack, f);
+	} else {
+		f = stdout;
+	}
 
 	/* Daemonize. */
 	if (args.daemon && daemon(1, 1))
 		err(1, "Can't daemonize");
 
 	start = now();
-	while (1) {
+	if (args.file) {
 		ebt_write_sample_to_file(sk, args.stack, f);
 		if (fflush(f))
 			err(1, "Can't save content of file `%s'", args.file);
-
-		diff = now() - start;
-		if (diff < args.sleep)
-			nsleep(args.sleep - diff);
-		start = now();
+	} else {
+		cnt = ebt_create_cnt(sk, args.stack);
+		assert(cnt);
 	}
 
-	assert(!fclose(f));
+	while (1) {
+		double diff = now() - start;
+		if (diff < args.sleep)
+			nsleep(args.sleep - diff);
+		else
+			warnx("Option --sleep=%i is too little; not enough time to estimate rates. Consider increasing the period",
+			args.sleep);
+
+		start = now();
+		if (args.file)
+			ebt_write_sample_to_file(sk, args.stack, f);
+		else
+			ebt_write_rates_to_file(sk, args.stack, f, args.sleep,
+				cnt);
+		if (fflush(f))
+			err(1, "Can't save content of file `%s'",
+				args.file ? args.file : "STDOUT");
+	}
+
+	ebt_free_cnt(cnt);
+	if (args.file)
+		assert(!fclose(f));
 	ebt_close(sk);
 	end_args(&args);
 	return 0;
