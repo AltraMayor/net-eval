@@ -297,11 +297,10 @@ int main(int argc, char **argv)
 		err(1, "Prefix file `%s' is empty", args.prefix_filename);
 
 	/* Cache Zipf sampling. */
-	printf("Initializing Zipf cache... ");
-	fflush(stdout);
+	printf_fsh("Initializing Zipf cache... ");
 	init_zipf_cache(&zcache, prefixes_count * 30, args.s, prefixes_count,
 		node_seed.seeds, SEED_UINT32_N);
-	printf("DONE\n");
+	printf_fsh("DONE\n");
 	/*
 	print_zipf_cache(&zcache);
 	*/
@@ -322,7 +321,7 @@ int main(int argc, char **argv)
 		if (!args.interactive) {
 			diff = now() - start;
 			if (diff >= 10.0) {
-				printf("%.1f pps\n", count / diff);
+				printf_fsh("%.1f pps\n", count / diff);
 				count = 0.0;
 				start = now();
 			}

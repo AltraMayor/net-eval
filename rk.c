@@ -241,8 +241,7 @@ int main(int argc, char **argv)
 
 	/* Load destinations into routing table. */
 	init_rtnl_batch(&b, args.stack);
-	printf("Loading routing table... ");
-	fflush(stdout);
+	printf_fsh("Loading routing table... ");
 	start = now();
 	for (i = 0; i < prefixes_count; i++) {
 		struct net_prefix *pp = &prefixes[i];
@@ -253,7 +252,7 @@ int main(int argc, char **argv)
 	diff = now() - start;
 	if (diff > 0.0)
 		printf("%.1f entry/s ", prefixes_count / diff);
-	printf("DONE\n");
+	printf_fsh("DONE\n");
 
 	if (args.update_rate <= 0)
 		goto out;
@@ -305,7 +304,7 @@ int main(int argc, char **argv)
 			last_now = now();
 			diff = last_now - start;
 			if (diff >= 10.0) {
-				printf("%.1f entry/s\n", count / diff);
+				printf_fsh("%.1f entry/s\n", count / diff);
 				count = 0.0;
 				last_now = start = now();
 			}
