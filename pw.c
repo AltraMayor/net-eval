@@ -21,6 +21,8 @@ static char doc[] = "PW -- packet generator for evaluation of "
 
 static struct argp_option options[] = {
 	{"prefix",	'p', "FILE",	0, "Name of prefix file"},
+	{"prefix-limit", 'x', "N",	0,
+		"Consider only the first N entries of the prefix file *after* shuffling it"},
 	{"zipf",	'z', "EXP",	0, "Parameter s of Zipf distribution"},
 	{"stack",	's', "NET",	0,
 		"Chose between 'ip' and 'xia' stacks"},
@@ -45,6 +47,7 @@ static struct argp_option options[] = {
 
 struct args {
 	const char *prefix_filename;
+	uint64_t prefix_limit;
 	double s;
 	const char *stack;
 	const char *ifname;
@@ -147,6 +150,12 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
 	switch (key) {
 	case 'p':
 		args->prefix_filename = arg;
+		break;
+
+	case 'x':
+		args->prefix_limit = arg_to_long(state, arg);
+		if (args->prefix_limit < 1)
+			argp_error(state, "Prefix limit must be >= 1");
 		break;
 
 	case 'z': {
@@ -256,6 +265,7 @@ int main(int argc, char **argv)
 	struct args args = {
 		/* Defaults. */
 		.prefix_filename	= "prefix",
+		.prefix_limit		= 0,
 		.s			= 1.0,
 		.stack			= "ip",
 		.ifname			= "eth0",
@@ -295,6 +305,15 @@ int main(int argc, char **argv)
 		&prefixes_count, s1.seeds, SEED_UINT32_N, 1);
 	if (!prefixes_count)
 		err(1, "Prefix file `%s' is empty", args.prefix_filename);
+	if (args.prefix_limit) {
+		if (args.prefix_limit > prefixes_count)
+			err(1, "Option --prefix-limit=%" PRIu64 " "
+				"is larger than the number of entries in "
+				"the prefix file `%s' (= %" PRIu64 ")",
+				args.prefix_limit, args.prefix_filename,
+				prefixes_count);
+		prefixes_count = args.prefix_limit;
+	}
 
 	/* Cache Zipf sampling. */
 	printf_fsh("Initializing Zipf cache... ");
