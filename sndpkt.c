@@ -153,7 +153,7 @@ static void make_xia_template(char *packet, int packet_size,
 	const char *dst_addr_type, int *poffset)
 {
 	struct xiphdr *xip;
-	int hdr_len;
+	int hdr_len, payload_len;
 
 	assert(packet_size >= MIN_XIP_HEADER);
 	assert(packet_size <= MAX_XIP_HEADER + XIP_MAXPLEN);
@@ -202,8 +202,10 @@ static void make_xia_template(char *packet, int packet_size,
 	}
 
 	*poffset = xip_hdr_size(xip->num_dst - 1, 0) + sizeof(xid_type_t);
-	xip->payload_len = htons(packet_size - hdr_len);
-	fill_payload(packet + hdr_len, xip->payload_len);
+	payload_len = packet_size - hdr_len;
+	assert(payload_len >= 0);
+	xip->payload_len = htons(payload_len);
+	fill_payload(packet + hdr_len, payload_len);
 }
 
 static inline void set_xia_template(char *template, int offset,
