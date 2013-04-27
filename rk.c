@@ -220,8 +220,7 @@ int main(int argc, char **argv)
 		.ports			= NULL,
 	};
 
-	int nnodes = args.count + 1;	/* Ports + Router (1).	*/
-	int node_id = nnodes;		/* It is the router.	*/
+	int nnodes, node_id;
 	struct seed s1, s2, node_seed;
 	int force_addr;
 	struct net_prefix *prefixes;
@@ -236,6 +235,8 @@ int main(int argc, char **argv)
 	argp_parse(&argp, argc, argv, 0, NULL, &args);
 
 	/* Load seeds. */
+	nnodes = args.count + 1;	/* Ports + Router (1).	*/
+	node_id = nnodes;		/* It is the router.	*/
 	load_seeds(args.run, nnodes, node_id, &s1, &s2, &node_seed);
 
 	/* Load and shuffle destination addresses. */
