@@ -193,6 +193,9 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
 		if (args->count < 1)
 			argp_error(state, "There must be at least one pair of "
 				"inteface and gateway");
+		if (args->update_rate > 0 && args->count == 1)
+			argp_error(state, "When update rate (= %i) is greater than zero, there must be at least two pairs of interface and gateway",
+				args->update_rate);
 		break;
 
 	default:
